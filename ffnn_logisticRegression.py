@@ -5,7 +5,7 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 
 # Device configuration
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 # Hyper-parameters 
 input_size = 784 # 28x28
@@ -33,57 +33,85 @@ train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
 test_loader = torch.utils.data.DataLoader(dataset=test_dataset, 
                                           batch_size=batch_size, 
                                           shuffle=False)
+#%%
+# Same as linear regression! 
+class LogisticRegressionModel(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super(LogisticRegressionModel, self).__init__()
+        self.linear = nn.Linear(input_dim, output_dim)
 
-examples = iter(test_loader)
-example_data, example_targets = examples.next()
-
-for i in range(6):
-    plt.subplot(2,3,i+1)
-    plt.imshow(example_data[i][0], cmap='gray')
-plt.show()
-
-# Fully connected neural network with one hidden layer
-class NeuralNet(nn.Module):
-    def __init__(self, input_size, hidden_size, num_classes):
-        super(NeuralNet, self).__init__()
-        self.input_size = input_size
-        self.l1 = nn.Linear(input_size, hidden_size) 
-        self.relu = nn.ReLU()
-        self.l2 = nn.Linear(hidden_size, num_classes)  
-    
     def forward(self, x):
-        out = self.l1(x)
-        out = self.relu(out)
-        out = self.l2(out)
-        # no activation and no softmax at the end
+        out = self.linear(x)
         return out
 
-model = NeuralNet(input_size, hidden_size, num_classes).to(device)
+input_dim = 28*28
+output_dim = 10
+model = LogisticRegressionModel(input_dim, output_dim)
+
+#%%
 
 # Loss and optimizer
 criterion = nn.CrossEntropyLoss()
+# 1. Computes softmax (logistic/softmax function)
+# 2. Computes cross entropy
+
+#parameters = parameters - learning_rate * parameters_gradients
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)  
 
+# Type of parameter object
+print(model.parameters())
+
+# Length of parameters
+print(len(list(model.parameters())))
+
+# FC 1 Parameters 
+print(list(model.parameters())[0].size())
+
+# FC 1 Bias Parameters
+print(list(model.parameters())[1].size())
+
+#%%
+"""
+**7step process for training models**
+1-Convert inputs/labels to tensors with gradients
+2-Clear gradient buffets
+3-Get output given inputs
+4-Get loss
+5-Get gradients w.r.t. parameters
+6-Update parameters using gradients
+7-parameters = parameters - learning_rate * parameters_gradients
+8-REPEAT
+
+"""
+
 # Train the model
-n_total_steps = len(train_loader)
+iter = 0
 for epoch in range(num_epochs):
-    for i, (images, labels) in enumerate(train_loader):  
-        # origin shape: [100, 1, 28, 28]
-        # resized: [100, 784]
-        images = images.reshape(-1, 28*28).to(device)
+    for i, (images, labels) in enumerate(train_loader):
+        # Load images as Variable
+        images = images.view(-1, 28*28).requires_grad_().to(device) #[28,28],(gradyanlar hesaplanacak)
         labels = labels.to(device)
-        
-        # Forward pass
-        outputs = model(images)
-        loss = criterion(outputs, labels)
-        
-        # Backward and optimize
+        model.to(device)
+
+        # Clear gradients w.r.t. parameters (sıfırlama yapılıyor)
         optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        
+
+        # Forward pass to get output/logits (networkte ileri yayılım hesabı)
+        outputs = model(images)
+
+        #yapılan error hesabı için loss function: softmax --> cross entropy loss
+        loss = criterion(outputs, labels) 
+
+        #kaydedilen gradyanların getirilmesi
+        loss.backward() 
+
+        #gradyanlara göre parametrelerin güncellenmesi
+        optimizer.step() 
+
         if (i+1) % 100 == 0:
-            print (f'Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{n_total_steps}], Loss: {loss.item():.4f}')
+            print (f'Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}')
+            
+#%%
 
 # Test the model
 # In test phase, we don't need to compute gradients (for memory efficiency)
